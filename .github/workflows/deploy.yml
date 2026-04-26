@@ -1,4 +1,4 @@
-name: CI/CD for Static Website
+name: Deploy Static Website with Docker
 
 on:
   push:
@@ -6,21 +6,38 @@ on:
       - main
 
 jobs:
-  build-and-test:
+  build-and-push:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
       - name: Build Docker Image
-        run: docker build -t static-website .
+        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/static-website:latest .
 
-      - name: Run container for testing
-        run: |
-          docker run -d -p 8080:80 --name test-site static-website
-          sleep 5
-          curl http://localhost:8080
+      - name: Push Docker Image
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/static-website:latest
 
-      - name: Stop container
-        run: docker stop test-site && docker rm test-site
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/static-website:latest
+            docker stop static-site || true
+            docker rm static-site || true
+            docker run -d -p 80:80 --name static-site ${{ secrets.DOCKERHUB_USERNAME }}/static-website:latest
