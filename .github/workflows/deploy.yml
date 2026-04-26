@@ -1,0 +1,26 @@
+name: CI/CD for Static Website
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: docker build -t static-website .
+
+      - name: Run container for testing
+        run: |
+          docker run -d -p 8080:80 --name test-site static-website
+          sleep 5
+          curl http://localhost:8080
+
+      - name: Stop container
+        run: docker stop test-site && docker rm test-site
